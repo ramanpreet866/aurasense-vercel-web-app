@@ -1,30 +1,17 @@
 /**
- * VERCEL Serverless Function (Node.js)
- *
- * This function acts as the "brain" for your project.
- * It:
- * 1. Receives raw data (HR, HRV, BT, userId) from the ESP32.
- * 2. Calls your hosted API on Render with that raw data.
- * 3. Gets the stress prediction.
- * 4. Writes that prediction to the correct Firestore document.
+ * AuraSense - Vercel Function
+ * Receives HR/HRV/BT data from ESP32, sends it to the prediction API,
+ * and writes the prediction to Firestore.
  */
 
 const axios = require("axios");
 
-// Your hosted API endpoint
 const RENDER_API_ENDPOINT = "https://aurasense-api.onrender.com/predict";
 
-// Environment variables (set these in Vercel Dashboard → Settings → Environment Variables)
 const FIREBASE_API_KEY = process.env.FIREBASE_API_KEY;
 const FIREBASE_PROJECT_ID = process.env.FIREBASE_PROJECT_ID;
 
-/**
- * Writes the final data to Firestore using REST API (no admin SDK required)
- * @param {string} userId - The user's UID
- * @param {object} data - Data to write (stress_level, hr, probabilities, etc.)
- */
 async function writeToFirestore(userId, data) {
-  // ✅ Correct Firestore path: user_display/{userId}/readings/latest
   const docPath = `projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents/user_display/${userId}/readings/latest`;
 
   const fields = {
@@ -42,7 +29,7 @@ async function writeToFirestore(userId, data) {
   }
 
   try {
-    await axios.patch(
+    await axios.post(
       `https://firestore.googleapis.com/v1/${docPath}?key=${FIREBASE_API_KEY}`,
       { fields }
     );
@@ -55,9 +42,6 @@ async function writeToFirestore(userId, data) {
   }
 }
 
-/**
- * Main handler for Vercel
- */
 module.exports = async (req, res) => {
   if (req.method !== "POST") {
     res.setHeader("Allow", ["POST"]);
@@ -82,23 +66,21 @@ module.exports = async (req, res) => {
   };
 
   try {
-    // Call your hosted API on Render
     const apiResponse = await axios.post(RENDER_API_ENDPOINT, apiPayload);
 
     if (apiResponse.data && apiResponse.data.stress_level) {
       const prediction = apiResponse.data.stress_level;
       const probabilities = apiResponse.data.probabilities || null;
 
-      console.log(`[Vercel Brain] ✅ API Success. Prediction: ${prediction}`);
+      console.log(`[Vercel Brain] ✅ Prediction: ${prediction}`);
 
-      // Write prediction to Firestore
       await writeToFirestore(userId, {
         stress_level: prediction,
-        probabilities: probabilities,
-        hr: hr,
+        probabilities,
+        hr,
       });
 
-      return res.status(200).send({ success: true, prediction: prediction });
+      return res.status(200).send({ success: true, prediction });
     } else {
       console.error(
         "[Vercel Brain] ⚠️ API returned unexpected format:",
@@ -108,9 +90,7 @@ module.exports = async (req, res) => {
     }
   } catch (error) {
     console.error("[Vercel Brain] ❌ Error calling prediction API:", error.message);
-    if (error.response) {
-      console.error("API Error Data:", error.response.data);
-    }
+    if (error.response) console.error("API Error Data:", error.response.data);
     return res.status(500).send({ error: "Internal - API Call Failed" });
   }
 };
