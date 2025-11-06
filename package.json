@@ -1,4 +1,3 @@
-```json:Vercel Dependencies:package.json
 {
   "name": "aurasense-vercel-brain",
   "version": "1.0.0",
@@ -8,4 +7,3 @@
     "axios": "^1.6.0"
   }
 }
-```eof
